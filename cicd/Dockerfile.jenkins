@@ -1,0 +1,39 @@
+FROM jenkins/jenkins:lts
+
+USER root
+
+RUN apt-get update
+RUN apt-get install -y ca-certificates curl wget iputils-ping
+RUN install -m 0755 -d /etc/apt/keyrings
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+RUN chmod a+r /etc/apt/keyrings/docker.asc
+
+RUN echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+    tee /etc/apt/sources.list.d/docker.list > /dev/null
+RUN  apt-get update
+RUN  apt-get install -y  docker-ce-cli
+
+
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+
+RUN wget https://releases.hashicorp.com/vault/1.19.5/vault_1.19.5_linux_amd64.zip  -O vault.zip
+RUN unzip vault.zip  && mv vault /usr/local/bin/ && chmod +x /usr/local/bin/vault
+RUN rm  vault.zip
+
+
+RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+RUN chmod +x /usr/local/bin/yq
+
+
+
+RUN wget https://get.helm.sh/helm-v3.18.1-linux-amd64.tar.gz
+RUN tar -zxvf helm-v3.18.1-linux-amd64.tar.gz
+RUN mv linux-amd64/helm /usr/local/bin/helm
+
+
+
+USER jenkins

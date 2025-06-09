@@ -1,0 +1,15 @@
+replicaCount: 1
+
+image:
+  repository: manualapp       # หรือ dockerhub เช่น: yourname/manualapp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+containerPort: 3000
+
+imagePullSecrets:
+  - name: nexus-regcred

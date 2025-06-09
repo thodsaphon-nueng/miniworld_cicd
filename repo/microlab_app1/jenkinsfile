@@ -1,0 +1,209 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME   = "microlab_app1"
+        IMAGE_TAG    = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+        REGISTRY_URL = "nexus:5000"
+    }
+
+    stages {
+        stage('Cleanup Old Images') {
+            steps {
+                script {
+                    sh """
+                        echo "Cleaning up Docker resources for ${IMAGE_NAME}..."
+                        docker ps -a --format '{{.ID}} {{.Image}}' | grep '${IMAGE_NAME}:${BRANCH_NAME}-' | awk '{print \$1}' | xargs -r docker rm -f || true
+                        docker images ${IMAGE_NAME} -q | xargs -r docker rmi -f || true
+
+
+                        
+                    """
+
+
+                    // if (env.BRANCH_NAME == '_dev') {
+                    //     sh """
+
+                    //     helm uninstall microlab-app1--dev --namespace development
+
+                    //     """
+                    // }
+
+
+                    // if (env.BRANCH_NAME == 'main') {
+                    //     sh """
+
+                    //     helm uninstall microlab-app1-main --namespace production
+
+                    //     """
+                    // }
+
+
+                }
+            }
+        }
+
+        stage('Read Vault Secrets') {
+            steps {
+                script {
+                    // def vaultPath = (env.BRANCH_NAME == 'main') ? 'secret/myapp_main' : 'secret/myapp'
+
+                    // withCredentials([[$class: 'VaultTokenCredentialBinding', credentialsId: 'vault_credential', vaultAddr: 'http://vault:8200']]) {
+                    //     sh """
+                    //         echo 'env:' > values-vault.yaml
+                    //         vault kv get -format=yaml ${vaultPath} | \
+                    //         yq eval '.data.data' | \
+                    //         sed -E 's/^([^:]+):[[:space:]]*(.+)$/  \\1: "\\2"/' >> values-vault.yaml
+                    //     """
+                    // }
+
+
+                    if (env.BRANCH_NAME == '_dev') {
+                        withCredentials([[$class: 'VaultTokenCredentialBinding', credentialsId: 'vault_credential', vaultAddr: 'http://vault:8200']]) {
+                                sh script: """                                                        
+                                    
+
+                                vault kv get -format=yaml secret/myapp | yq eval .data.data | tr -d '"' | tr -d "'" | sed -e 's|: |=|g' > .env
+
+                                """     
+                            }
+                    }
+
+                    if (env.BRANCH_NAME == 'main'){
+                                withCredentials([[$class: 'VaultTokenCredentialBinding', credentialsId: 'vault_credential', vaultAddr: 'http://vault:8200']]) {
+                                                                sh script: """                                                        
+                                                                    vault kv get -format=yaml secret/myapp_main | yq eval .data.data | tr -d '"' | tr -d "'" | sed -e 's|: |=|g' > .env
+                                                                """     
+                                                            }
+
+                    }
+                }
+            }
+        }
+
+
+        
+            // stage('Convert .env to env-values.yaml') {
+            //     steps {
+                    
+
+            //         sh '''
+            //         echo "env:" > env-values.yaml
+            //         awk -F= '!/^#/ && NF==2 && $1 ~ /^[A-Za-z_][A-Za-z0-9_]*$/ {
+            //             gsub(/"/, "", \$2);
+            //             printf "  - name: %s\\\\n    value: \\\"%s\\\"\\\\n", \$1, \$2
+            //         }' .env >> env-values.yaml
+            //         '''
+            //     }
+            // }
+
+
+            // stage('Convert cat') {
+            //     steps {
+            //         sh '''
+            //                 cat env-values.yaml
+            //         '''
+            //     }
+            // }
+
+        stage('Branch Check') {
+            steps {
+                script {
+                    echo "Building branch: ${env.BRANCH_NAME}"
+                    if (env.BRANCH_NAME == 'main') {
+                        echo "Production deploy"
+                    } else if (env.BRANCH_NAME == '_dev') {
+                        echo "Development deploy"
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh """
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                    """
+                }
+            }
+        }
+
+        stage('Push To Docker Registry') {
+            steps {
+                script {
+                    echo "Tagging and pushing image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh """
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+                        docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+                }
+            }
+        }
+
+        stage('Clone Helm Repo') {
+            steps {
+                dir('infra') {
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[
+                            url: 'https://gitlab.com/nueng_ch/infa.git',
+                            credentialsId: 'gitlab-token' // Jenkins credentials (username + PAT)
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Pre Deploy with Helm') {
+            steps {
+                script {
+  
+                    sh """
+                        cp ./infra/sc.sh .
+                        chmod +x sc.sh
+                        bash sc.sh
+                        cat env-values.yaml
+                    """
+                }
+            }
+        }
+
+
+        stage('Deploy with Helm') {
+            steps {
+
+                script {
+                    def releaseName = "${IMAGE_NAME}-${BRANCH_NAME}".replaceAll('_', '-')
+                    def namespace   = (BRANCH_NAME == 'main') ? "production" : "development"
+                    def helmChartPath = "infra/microlab_app1"
+
+                    // sh """
+                    //     helm upgrade --install ${releaseName} ${helmChartPath} \
+                    //     --namespace ${namespace} --create-namespace \
+                    //     --set image.repository=${REGISTRY_URL}/${IMAGE_NAME} \
+                    //     --set image.tag=${IMAGE_TAG}
+                    // """
+
+                    sh """
+
+                    helm upgrade --install ${releaseName} ${helmChartPath} \\
+                    --namespace ${namespace} --create-namespace \\
+                    --set image.repository=${REGISTRY_URL}/${IMAGE_NAME} \\
+                    --set image.tag=${IMAGE_TAG} \\
+                    -f env-values.yaml
+
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

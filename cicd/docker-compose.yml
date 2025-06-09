@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    container_name: jenkins
+    restart: always
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./config_vault:/config_vault
+      - ./config_kube:/config_kube
+    environment:
+      DOCKER_HOST: "tcp://dind:2375"
+      VAULT_ADDR: "http://vault:8200"
+      VAULT_TOKEN: "myroot"
+    depends_on:
+      - vault
+      - dind
+    networks:
+      - jenkins-net
+  
+  dind:
+    image: docker:24-dind
+    container_name: dind
+    privileged: true
+    networks:
+      - jenkins-net
+    ports:
+      - "2375"
+      - "3000:3000"
+      - "3001:3001"
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - ./config_dind/dind-daemon.json:/etc/docker/daemon.json  
+
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "myroot"
+      VAULT_ADDR: "http://0.0.0.0:8200"
+    ports:
+      - "8200:8200"
+    networks:
+      - jenkins-net
+  
+  nexus:
+    image: sonatype/nexus3
+    container_name: nexus
+    ports:
+      - "8081:8081"     
+      - "5001:5000"    
+    volumes:
+      - nexus-data:/nexus-data
+    environment:
+      - INSTALL4J_ADD_VM_PARAMS=-Xms512m -Xmx1024m -XX:MaxDirectMemorySize=2G
+    restart: always
+    networks:
+      - jenkins-net
+
+
+volumes:
+  jenkins_home:
+  nexus-data:
+
+networks:
+  jenkins-net:
+

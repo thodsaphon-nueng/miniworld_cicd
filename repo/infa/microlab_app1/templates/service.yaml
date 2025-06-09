@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: microlab-app1
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: microlab-app1
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.containerPort }}
