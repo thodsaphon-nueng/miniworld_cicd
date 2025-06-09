@@ -46,17 +46,6 @@ pipeline {
         stage('Read Vault Secrets') {
             steps {
                 script {
-                    // def vaultPath = (env.BRANCH_NAME == 'main') ? 'secret/myapp_main' : 'secret/myapp'
-
-                    // withCredentials([[$class: 'VaultTokenCredentialBinding', credentialsId: 'vault_credential', vaultAddr: 'http://vault:8200']]) {
-                    //     sh """
-                    //         echo 'env:' > values-vault.yaml
-                    //         vault kv get -format=yaml ${vaultPath} | \
-                    //         yq eval '.data.data' | \
-                    //         sed -E 's/^([^:]+):[[:space:]]*(.+)$/  \\1: "\\2"/' >> values-vault.yaml
-                    //     """
-                    // }
-
 
                     if (env.BRANCH_NAME == '_dev') {
                         withCredentials([[$class: 'VaultTokenCredentialBinding', credentialsId: 'vault_credential', vaultAddr: 'http://vault:8200']]) {
@@ -80,31 +69,7 @@ pipeline {
                 }
             }
         }
-
-
         
-            // stage('Convert .env to env-values.yaml') {
-            //     steps {
-                    
-
-            //         sh '''
-            //         echo "env:" > env-values.yaml
-            //         awk -F= '!/^#/ && NF==2 && $1 ~ /^[A-Za-z_][A-Za-z0-9_]*$/ {
-            //             gsub(/"/, "", \$2);
-            //             printf "  - name: %s\\\\n    value: \\\"%s\\\"\\\\n", \$1, \$2
-            //         }' .env >> env-values.yaml
-            //         '''
-            //     }
-            // }
-
-
-            // stage('Convert cat') {
-            //     steps {
-            //         sh '''
-            //                 cat env-values.yaml
-            //         '''
-            //     }
-            // }
 
         stage('Branch Check') {
             steps {
