@@ -166,6 +166,10 @@ Create a new Docker (hosted) repository:
 * Name: `microlab`
 * Port: `5000`
 
+Inside Jenkins
+
+    docker login nexus:5000
+
 ---
 
 ## Networking
